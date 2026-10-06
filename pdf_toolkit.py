@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PDF Tool: split a PDF into single pages, or combine multiple PDFs into one.
+"""PDF Tool: split a PDF into single pages, combine multiple PDFs, or rotate a PDF.
 
 Usage:
     pip install pypdf
@@ -217,6 +217,79 @@ def combine_mode() -> None:
 
 
 # --------------------------------------------------------------------------
+# Rotate mode
+# --------------------------------------------------------------------------
+
+def ask_rotation() -> tuple[str, int] | None:
+    """Ask for the rotation direction. Returns (label, angle) or None if cancelled."""
+    while True:
+        answer = input("\nRotate to the left or right? (l/r, or 'q' to go back): ").strip().lower()
+        if answer in {"q", "quit", "exit"}:
+            return None
+        if answer in {"l", "left"}:
+            return "left", 270  # 90 degrees counter-clockwise
+        if answer in {"r", "right"}:
+            return "right", 90  # 90 degrees clockwise
+        print("Error: please enter 'l' for left or 'r' for right.")
+
+
+def rotate_pdf(pdf_path: Path, label: str, angle: int) -> Path | None:
+    """Rotate every page and save as a new file. Returns the output path, or None if skipped."""
+    reader = open_pdf(pdf_path)
+
+    # Save next to the original; never overwrite the original file
+    out_path = pdf_path.with_name(f"{pdf_path.stem}_rotated_{label}.pdf")
+    if out_path.exists():
+        answer = input(f"'{out_path.name}' already exists. Overwrite? (y/n): ").strip().lower()
+        if answer not in {"y", "yes"}:
+            print("Rotation cancelled.")
+            return None
+
+    writer = PdfWriter()
+    for page in reader.pages:
+        page.rotate(angle)
+        writer.add_page(page)
+
+    with open(out_path, "wb") as f:
+        writer.write(f)
+
+    print(f"Rotated {len(reader.pages)} page(s) to the {label}. Saved as: {out_path}")
+    return out_path
+
+
+def rotate_mode() -> None:
+    print("\n--- Rotate mode ---")
+    while True:
+        user_input = input("\nWhich PDF file would you like to rotate? (or 'q' to go back): ").strip()
+
+        if user_input.lower() in {"q", "quit", "exit"}:
+            return
+        if not user_input:
+            print("Error: please enter a file name.")
+            continue
+
+        try:
+            pdf_path = validate_file(user_input)
+            open_pdf(pdf_path)  # check the PDF is usable before asking for the direction
+
+            rotation = ask_rotation()
+            if rotation is None:
+                return
+            label, angle = rotation
+
+            rotate_pdf(pdf_path, label, angle)
+            return
+        except ValueError as err:
+            print(f"Error: {err}")
+        except PermissionError:
+            print("Error: permission denied. Check the file/folder permissions.")
+        except OSError as err:
+            print(f"Error: could not read or write files ({err}).")
+        except Exception as err:  # last-resort safety net
+            print(f"Unexpected error: {err}")
+
+
+# --------------------------------------------------------------------------
 # Main menu
 # --------------------------------------------------------------------------
 
@@ -226,17 +299,20 @@ def main() -> None:
         print("\nWhat would you like to do?")
         print("  1 - Split a PDF into single pages")
         print("  2 - Combine multiple PDFs into one")
-        choice = input("Enter 1 or 2 (or 'q' to quit): ").strip().lower()
+        print("  3 - Rotate a PDF to the left or right")
+        choice = input("Enter 1, 2 or 3 (or 'q' to quit): ").strip().lower()
 
         if choice == "1":
             split_mode()
         elif choice == "2":
             combine_mode()
+        elif choice == "3":
+            rotate_mode()
         elif choice in {"q", "quit", "exit"}:
             print("Goodbye!")
             break
         else:
-            print("Error: please enter 1, 2 or q.")
+            print("Error: please enter 1, 2, 3 or q.")
 
 
 if __name__ == "__main__":
