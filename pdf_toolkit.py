@@ -78,20 +78,21 @@ def split_pdf(pdf_path: Path) -> Path:
     return output_dir
 
 
-def split_mode() -> None:
+def split_mode() -> bool:
+    """Returns True if a split finished (so the mode restarts), False if the user went back."""
     print("\n--- Split mode ---")
     while True:
         user_input = input("\nWhich PDF file would you like to split? (or 'q' to go back): ").strip()
 
         if user_input.lower() in {"q", "quit", "exit"}:
-            return
+            return False
         if not user_input:
             print("Error: please enter a file name.")
             continue
 
         try:
             split_pdf(validate_file(user_input))
-            return
+            return True
         except ValueError as err:
             print(f"Error: {err}")
         except PermissionError:
@@ -133,7 +134,8 @@ def ask_output_path(default_dir: Path, inputs: list[Path]) -> Path | None:
         return out_path
 
 
-def combine_mode() -> None:
+def combine_mode() -> bool:
+    """Returns True if a combine finished (so the mode restarts), False if cancelled or failed."""
     print("\n--- Combine mode ---")
     print("Enter PDF file names one at a time, in the order they should appear.")
     print("Commands:  'done' = finish and combine   'undo' = remove last file")
@@ -148,7 +150,7 @@ def combine_mode() -> None:
 
         if command in {"q", "quit", "cancel"}:
             print("Combine cancelled.")
-            return
+            return False
 
         if command == "":
             # An empty line doesn't end the loop, so an accidental Enter can't cut it short
@@ -192,7 +194,7 @@ def combine_mode() -> None:
     out_path = ask_output_path(files[0].parent, files)
     if out_path is None:
         print("Combine cancelled.")
-        return
+        return False
 
     try:
         writer = PdfWriter()
@@ -206,6 +208,7 @@ def combine_mode() -> None:
         with open(out_path, "wb") as f:
             writer.write(f)
         print(f"\nCombined {len(files)} files ({total_pages} pages) into: {out_path}")
+        return True
     except ValueError as err:
         print(f"Error: {err}")
     except PermissionError:
@@ -257,13 +260,14 @@ def rotate_pdf(pdf_path: Path, label: str, angle: int) -> Path | None:
     return out_path
 
 
-def rotate_mode() -> None:
+def rotate_mode() -> bool:
+    """Returns True if a rotation finished (so the mode restarts), False if the user went back."""
     print("\n--- Rotate mode ---")
     while True:
         user_input = input("\nWhich PDF file would you like to rotate? (or 'q' to go back): ").strip()
 
         if user_input.lower() in {"q", "quit", "exit"}:
-            return
+            return False
         if not user_input:
             print("Error: please enter a file name.")
             continue
@@ -274,11 +278,12 @@ def rotate_mode() -> None:
 
             rotation = ask_rotation()
             if rotation is None:
-                return
+                return False
             label, angle = rotation
 
-            rotate_pdf(pdf_path, label, angle)
-            return
+            if rotate_pdf(pdf_path, label, angle) is None:
+                continue  # overwrite declined: ask for a file again
+            return True
         except ValueError as err:
             print(f"Error: {err}")
         except PermissionError:
@@ -287,6 +292,7 @@ def rotate_mode() -> None:
             print(f"Error: could not read or write files ({err}).")
         except Exception as err:  # last-resort safety net
             print(f"Unexpected error: {err}")
+    return False
 
 
 # --------------------------------------------------------------------------
@@ -303,11 +309,14 @@ def main() -> None:
         choice = input("Enter 1, 2 or 3 (or 'q' to quit): ").strip().lower()
 
         if choice == "1":
-            split_mode()
+            while split_mode():
+                pass  # after a successful run, restart the same mode
         elif choice == "2":
-            combine_mode()
+            while combine_mode():
+                pass  # after a successful run, restart the same mode
         elif choice == "3":
-            rotate_mode()
+            while rotate_mode():
+                pass  # after a successful run, restart the same mode
         elif choice in {"q", "quit", "exit"}:
             print("Goodbye!")
             break
